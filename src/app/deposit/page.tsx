@@ -16,6 +16,7 @@ type DepositResponse = {
 export default function DepositPage() {
   const [amount, setAmount] = useState("1000");
   const [network, setNetwork] = useState("moov_tg");
+  const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
   const [depositId, setDepositId] = useState("");
   const [status, setStatus] = useState("");
@@ -23,7 +24,6 @@ export default function DepositPage() {
   const [error, setError] = useState("");
   const [checking, setChecking] = useState(false);
 
-  const activeDepositRef = useRef("");
   const checkingRef = useRef(false);
 
   useEffect(() => {
@@ -72,7 +72,9 @@ export default function DepositPage() {
 
           if (data.status === "FAILED") {
             setChecking(false);
-            setMessage("Le paiement a échoué. Aucun solde n'a été crédité.");
+            setMessage(
+              "Le paiement a échoué. Aucun solde n'a été crédité."
+            );
             return;
           }
         }
@@ -94,7 +96,10 @@ export default function DepositPage() {
 
     return () => {
       cancelled = true;
-      if (timer) clearTimeout(timer);
+
+      if (timer) {
+        clearTimeout(timer);
+      }
     };
   }, [depositId]);
 
@@ -105,10 +110,10 @@ export default function DepositPage() {
     setMessage("");
     setStatus("");
     setDepositId("");
-    activeDepositRef.current = "";
-    checkingRef.current = false;
 
     const numericAmount = Number(amount);
+    const cleanedPhone = phone.trim().replace(/[\s()-]/g, "");
+    const localPhone = cleanedPhone.replace(/^\+?228/, "");
 
     if (
       !Number.isSafeInteger(numericAmount) ||
@@ -118,6 +123,15 @@ export default function DepositPage() {
       setError("Choisis un montant entre 500 et 1 000 000 FCFA.");
       return;
     }
+
+    if (!/^\d{8}$/.test(localPhone)) {
+      setError(
+        "Saisis un numéro togolais valide de 8 chiffres, avec ou sans indicatif +228."
+      );
+      return;
+    }
+
+    const normalizedPhone = `+228${localPhone}`;
 
     setLoading(true);
 
@@ -130,6 +144,7 @@ export default function DepositPage() {
         body: JSON.stringify({
           amount: numericAmount,
           network,
+          phone: normalizedPhone,
         }),
       });
 
@@ -146,11 +161,10 @@ export default function DepositPage() {
       }
 
       if (data.depositId) {
-        activeDepositRef.current = data.depositId;
         setDepositId(data.depositId);
         setStatus(data.status ?? "PENDING");
         setMessage(
-          "Demande créée. Nous vérifierons régulièrement le statut du paiement."
+          "Demande transmise. Vérifie ton téléphone et suis les instructions de ton opérateur pour confirmer le paiement."
         );
       } else {
         setMessage(data.message || "Demande de dépôt créée.");
@@ -213,10 +227,13 @@ export default function DepositPage() {
             Nova Invest
           </p>
 
-          <h1 className="mt-3 text-3xl font-bold">Effectuer un dépôt</h1>
+          <h1 className="mt-3 text-3xl font-bold">
+            Effectuer un dépôt
+          </h1>
 
           <p className="mt-3 text-sm leading-6 text-slate-400">
-            Choisis ton montant et ton réseau Mobile Money.
+            Choisis le montant, ton réseau Mobile Money et le numéro
+            sur lequel tu souhaites recevoir la demande de paiement.
           </p>
 
           <form onSubmit={handleSubmit} className="mt-7 space-y-6">
@@ -245,6 +262,39 @@ export default function DepositPage() {
               </p>
             </div>
 
+            <div>
+              <label
+                htmlFor="phone"
+                className="mb-2 block text-sm font-medium"
+              >
+                Numéro Mobile Money
+              </label>
+
+              <div className="flex overflow-hidden rounded-xl border border-white/10 bg-[#041018] focus-within:border-[#18d5c4]">
+                <span className="flex items-center border-r border-white/10 px-3 text-sm text-slate-400">
+                  +228
+                </span>
+
+                <input
+                  id="phone"
+                  type="tel"
+                  inputMode="numeric"
+                  autoComplete="tel-national"
+                  placeholder="90 00 00 00"
+                  maxLength={14}
+                  required
+                  value={phone}
+                  onChange={(event) => setPhone(event.target.value)}
+                  className="min-w-0 flex-1 bg-transparent px-4 py-3 outline-none"
+                />
+              </div>
+
+              <p className="mt-2 text-xs leading-5 text-slate-500">
+                Entre le numéro associé au compte Moov Money ou
+                Togocel Money qui servira à payer.
+              </p>
+            </div>
+
             <fieldset>
               <legend className="mb-3 text-sm font-medium">
                 Réseau Mobile Money
@@ -266,7 +316,11 @@ export default function DepositPage() {
                     onChange={() => setNetwork("moov_tg")}
                     className="sr-only"
                   />
-                  <span className="block font-semibold">Moov Money</span>
+
+                  <span className="block font-semibold">
+                    Moov Money
+                  </span>
+
                   <span className="mt-1 block text-xs text-slate-400">
                     Togo
                   </span>
@@ -287,7 +341,11 @@ export default function DepositPage() {
                     onChange={() => setNetwork("togocel")}
                     className="sr-only"
                   />
-                  <span className="block font-semibold">Togocel Money</span>
+
+                  <span className="block font-semibold">
+                    Togocel Money
+                  </span>
+
                   <span className="mt-1 block text-xs text-slate-400">
                     Togo
                   </span>
@@ -315,13 +373,27 @@ export default function DepositPage() {
 
             {depositId && (
               <div className="rounded-xl border border-white/10 bg-[#041018] p-4 text-sm">
-                <p className="text-slate-400">Référence du dépôt</p>
-                <p className="mt-1 break-all font-mono">{depositId}</p>
+                <p className="text-slate-400">
+                  Référence du dépôt
+                </p>
 
-                <p className="mt-3 text-slate-400">Statut actuel</p>
+                <p className="mt-1 break-all font-mono">
+                  {depositId}
+                </p>
+
+                <p className="mt-3 text-slate-400">
+                  Statut actuel
+                </p>
+
                 <p className="mt-1 font-semibold text-[#18d5c4]">
                   {status || "PENDING"}
                 </p>
+
+                {checking && (
+                  <p className="mt-2 text-xs text-slate-400">
+                    Vérification automatique en cours...
+                  </p>
+                )}
 
                 <button
                   type="button"
@@ -338,13 +410,15 @@ export default function DepositPage() {
               disabled={loading}
               className="w-full rounded-xl bg-[#18d5c4] px-5 py-4 font-bold text-[#041018] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {loading ? "Préparation..." : "Continuer"}
+              {loading ? "Préparation..." : "Confirmer le dépôt"}
             </button>
           </form>
 
           <p className="mt-5 text-center text-xs leading-5 text-slate-500">
-            Le solde est crédité uniquement après confirmation du paiement
-            par SasPay.
+            La confirmation se fait sur ton téléphone. Ne communique
+            jamais ton code secret Mobile Money sur Nova Invest.
+            Ton solde est crédité uniquement après confirmation
+            vérifiée du paiement par SasPay.
           </p>
         </section>
       </div>

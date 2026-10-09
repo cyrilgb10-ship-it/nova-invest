@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 
-
 const SASPAY_API_URL = (
   process.env.SASPAY_API_URL || "https://api.saspay.me/api/v1"
 ).replace(/\/+$/, "");
@@ -20,29 +19,62 @@ function isAllowedNetwork(value: unknown): value is AllowedNetwork {
 
 function errorResponse(message: string, status: number) {
   return NextResponse.json(
-    { success: false, error: message },
+    {
+      success: false,
+      error: message,
+    },
     { status }
   );
 }
 
-function normalizeTogoPhone(phone: string): string {
+/**
+ * Normalise et valide un numéro togolais.
+ * Accepte notamment :
+ * 90 00 00 00
+ * 22890000000
+ * +22890000000
+ *
+ * Retourne null si le numéro est invalide.
+ */
+function normalizeTogoPhone(phone: string): string | null {
   const cleaned = phone.trim().replace(/[\s()-]/g, "");
 
-  if (cleaned.startsWith("+")) {
-    return cleaned;
+  let localNumber = cleaned;
+
+  if (cleaned.startsWith("+228")) {
+    localNumber = cleaned.slice(4);
+  } else if (cleaned.startsWith("228") && cleaned.length === 11) {
+    localNumber = cleaned.slice(3);
   }
 
-  if (cleaned.startsWith("228")) {
-    return `+${cleaned}`;
+  if (!/^\d{8}$/.test(localNumber)) {
+    return null;
   }
 
-  return `+228${cleaned}`;
+  return `+228${localNumber}`;
+}
+
+function getProviderError(result: unknown): string {
+  if (!result || typeof result !== "object") {
+    return "Aucun détail fourni par SasPay";
+  }
+
+  if ("message" in result && typeof result.message === "string") {
+    return result.message.slice(0, 500);
+  }
+
+  if ("error" in result && typeof result.error === "string") {
+    return result.error.slice(0, 500);
+  }
+
+  return "Aucun détail fourni par SasPay";
 }
 
 export async function POST(request: NextRequest) {
   let depositId: string | undefined;
 
   try {
+    // 1. Vérifier l'utilisateur connecté
     const user = await getCurrentUser();
 
     if (!user) {
@@ -52,15 +84,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const body = await request.json().catch(() => null);
+    // 2. Lire les données du formulaire
+    const body: unknown = await request.json().catch(() => null);
 
-    if (!body || typeof body !== "object") {
-      return errorResponse("Données invalides.", 400);
+    if (
+      !body ||
+      typeof body !== "object" ||
+      !("amount" in body) ||
+      !("network" in body) ||
+      !("phone" in body)
+    ) {
+      return errorResponse(
+        "Renseigne le montant, le réseau Mobile Money et le numéro de téléphone.",
+        400
+      );
     }
 
     const amount = body.amount;
     const network = body.network;
+    const submittedPhone = body.phone;
 
+    // 3. Valider le montant
     if (
       typeof amount !== "number" ||
       !Number.isSafeInteger(amount) ||
@@ -73,6 +117,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 4. Valider le réseau Mobile Money
     if (!isAllowedNetwork(network)) {
       return errorResponse(
         "Choisis Moov Money ou Togocel Money.",
@@ -80,19 +125,38 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 5. Valider le numéro saisi dans le formulaire
+    if (typeof submittedPhone !== "string") {
+      return errorResponse(
+        "Renseigne un numéro de téléphone valide.",
+        400
+      );
+    }
+
+    const phone = normalizeTogoPhone(submittedPhone);
+
+    if (!phone) {
+      return errorResponse(
+        "Le numéro doit contenir 8 chiffres togolais, avec ou sans l'indicatif +228.",
+        400
+      );
+    }
+
+    // 6. Vérifier la configuration SasPay
     const secretKey = process.env.SASPAY_SECRET_KEY;
 
     if (!secretKey) {
+      console.error(
+        "SASPAY_CONFIGURATION_ERROR: clé secrète absente"
+      );
+
       return errorResponse(
         "La configuration SasPay est incomplète.",
         503
       );
     }
 
-    /*
-     * Protection pendant le développement :
-     * aucun paiement n'est envoyé par défaut.
-     */
+    // 7. Garder les paiements désactivés hors production
     if (
       process.env.SASPAY_ENABLE_LIVE_PAYMENTS !== "true" ||
       process.env.NODE_ENV !== "production"
@@ -107,6 +171,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 8. Vérifier l'URL publique
     const appUrl = process.env.NEXT_PUBLIC_APP_URL;
 
     if (
@@ -120,17 +185,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!user.phone.trim()) {
-      return errorResponse(
-        "Aucun numéro de téléphone n'est associé à ton compte.",
-        400
-      );
-    }
-
-    /*
-     * Création locale de la demande.
-     * Le solde n'est pas crédité à cette étape.
-     */
+    // 9. Créer le dépôt en attente.
+    // Le solde n'est pas crédité à cette étape.
     const deposit = await prisma.deposit.create({
       data: {
         userId: user.id,
@@ -143,6 +199,7 @@ export async function POST(request: NextRequest) {
 
     depositId = deposit.id;
 
+    // 10. Envoyer la demande de paiement à SasPay
     const response = await fetch(
       `${SASPAY_API_URL}/payments/softpay/`,
       {
@@ -160,7 +217,7 @@ export async function POST(request: NextRequest) {
           customer: {
             first_name: user.firstName,
             last_name: user.lastName,
-            phone: normalizeTogoPhone(user.phone),
+            phone,
           },
           network,
         }),
@@ -169,21 +226,19 @@ export async function POST(request: NextRequest) {
       }
     );
 
+    // 11. Lire la réponse du prestataire
     const result: unknown = await response
       .json()
       .catch(() => null);
 
+    // 12. Diagnostiquer une réponse HTTP négative
     if (!response.ok) {
       console.error("SASPAY_PAYMENT_ERROR", {
         httpStatus: response.status,
         depositId: deposit.id,
+        providerMessage: getProviderError(result),
       });
 
-      /*
-       * On conserve le dépôt en attente : en cas de réponse
-       * ambiguë, il faut vérifier le fournisseur avant de
-       * déclarer le paiement définitivement échoué.
-       */
       return NextResponse.json(
         {
           success: false,
@@ -195,14 +250,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 13. Vérifier la réponse de SasPay
     if (
       !result ||
       typeof result !== "object" ||
       !("id" in result) ||
-      typeof result.id !== "string"
+      typeof result.id !== "string" ||
+      !result.id.trim()
     ) {
       console.error("SASPAY_INVALID_RESPONSE", {
         depositId: deposit.id,
+        responseReceived: result !== null,
       });
 
       return NextResponse.json(
@@ -222,11 +280,17 @@ export async function POST(request: NextRequest) {
       checkout_url?: string;
     };
 
+    // 14. Enregistrer l'identifiant du paiement SasPay
     await prisma.deposit.update({
-      where: { id: deposit.id },
-      data: { externalId: payment.id },
+      where: {
+        id: deposit.id,
+      },
+      data: {
+        externalId: payment.id,
+      },
     });
 
+    // 15. Confirmer la création de la demande
     return NextResponse.json({
       success: true,
       message:
@@ -240,7 +304,9 @@ export async function POST(request: NextRequest) {
     console.error("DEPOSIT_API_ERROR", {
       depositId,
       message:
-        error instanceof Error ? error.message : "Erreur inconnue",
+        error instanceof Error
+          ? error.message
+          : "Erreur inconnue",
     });
 
     return NextResponse.json(
