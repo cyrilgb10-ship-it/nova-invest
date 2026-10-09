@@ -5,6 +5,7 @@ import InvestmentCountdown from "@/components/InvestmentCountdown";
 import InvestmentTabs from "@/components/InvestmentTabs";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import ClaimInvestmentButton from "@/components/ClaimInvestmentButton";
 
 export const instant = false;
 
@@ -150,6 +151,10 @@ function ActiveInvestments({
             {/* Countdown */}
             <InvestmentCountdown
               startDate={investment.startDate.toISOString()}
+              maturityDate={investment.maturityDate.toISOString()}
+            />
+            <ClaimInvestmentButton
+              investmentId={investment.id}
               maturityDate={investment.maturityDate.toISOString()}
             />
 
