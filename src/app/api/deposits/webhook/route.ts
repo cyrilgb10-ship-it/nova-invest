@@ -2,8 +2,6 @@ import { NextResponse } from "next/server";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 
-export const runtime = "nodejs";
-
 const TOLERANCE_SECONDS = 300;
 
 type SasPayWebhook = {
