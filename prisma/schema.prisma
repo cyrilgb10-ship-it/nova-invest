@@ -1,0 +1,297 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum DepositStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+enum WithdrawalStatus {
+  PENDING
+  PROCESSING
+  PAID
+  REFUSED
+}
+
+enum InvestmentStatus {
+  ACTIVE
+  COMPLETED
+}
+
+enum TransactionType {
+  DEPOSIT
+  WITHDRAWAL
+  REFERRAL_REWARD
+  INVESTMENT
+  INVESTMENT_RETURN
+}
+
+enum NotificationType {
+  WITHDRAWAL
+  INVESTMENT
+  REFERRAL
+  SYSTEM
+}
+
+// ─────────────────────────────────────────────
+// UTILISATEURS
+// ─────────────────────────────────────────────
+
+model User {
+  id           String @id @default(cuid())
+  username     String @unique
+  firstName    String
+  lastName     String
+  phone        String @unique
+  passwordHash String
+
+  role UserRole @default(USER)
+
+  investBalance   Int @default(0)
+  withdrawBalance Int @default(0)
+
+  referralCode String @unique
+
+  referredById String?
+  referredBy   User? @relation("UserSponsor", fields: [referredById], references: [id])
+  referredUsers User[] @relation("UserSponsor")
+
+  referralsGiven    Referral[] @relation("Referrer")
+  referralsReceived Referral[] @relation("Referred")
+
+  investments  Investment[]
+  deposits     Deposit[]
+  withdrawals  Withdrawal[]
+  transactions Transaction[]
+  notifications Notification[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([referredById])
+  @@index([role])
+}
+
+// ─────────────────────────────────────────────
+// ADMINISTRATEUR
+// ─────────────────────────────────────────────
+
+model Admin {
+  id           String @id @default(cuid())
+  username     String @unique
+  passwordHash String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─────────────────────────────────────────────
+// PRODUITS D'INVESTISSEMENT
+// ─────────────────────────────────────────────
+
+model InvestmentProduct {
+  id String @id @default(cuid())
+
+  name String
+
+  investmentAmount Int
+  returnAmount     Int
+  profitAmount     Int
+
+  durationDays Int
+
+  // NULL = illimité
+  purchaseLimit Int?
+
+  active Boolean @default(true)
+
+  investments Investment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([active])
+}
+
+// ─────────────────────────────────────────────
+// INVESTISSEMENTS
+// ─────────────────────────────────────────────
+
+model Investment {
+  id String @id @default(cuid())
+
+  userId String
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  productId String
+  product   InvestmentProduct @relation(fields: [productId], references: [id])
+
+  amountInvested Int
+  profitAmount   Int
+  returnAmount   Int
+
+  startDate    DateTime
+  maturityDate DateTime
+
+  status InvestmentStatus @default(ACTIVE)
+
+  completedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([productId])
+  @@index([status])
+  @@index([maturityDate])
+}
+
+// ─────────────────────────────────────────────
+// DÉPÔTS
+// ─────────────────────────────────────────────
+
+model Deposit {
+  id String @id @default(cuid())
+
+  userId String
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  amount Int
+
+  network String @default("tmoney")
+  provider String @default("saspay")
+
+  externalId String?
+
+  status DepositStatus @default(PENDING)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([externalId])
+}
+
+// ─────────────────────────────────────────────
+// RETRAITS
+// ─────────────────────────────────────────────
+
+model Withdrawal {
+  id String @id @default(cuid())
+
+  userId String
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  firstName String
+  lastName  String
+
+  amount Int
+  fee Int @default(500)
+  netAmount Int
+
+  network String @default("moov")
+  phone String
+
+  status WithdrawalStatus @default(PENDING)
+
+  rejectionReason String?
+
+  processedAt DateTime?
+  completedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status])
+}
+
+// ─────────────────────────────────────────────
+// PARRAINAGES
+// ─────────────────────────────────────────────
+
+model Referral {
+  id String @id @default(cuid())
+
+  referrerId String
+  referrer   User @relation("Referrer", fields: [referrerId], references: [id], onDelete: Cascade)
+
+  referredId String
+  referred   User @relation("Referred", fields: [referredId], references: [id], onDelete: Cascade)
+
+  firstInvestmentAt DateTime?
+
+  rewardAmount Int @default(500)
+  rewardGiven  Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([referredId])
+  @@index([referrerId])
+}
+
+// ─────────────────────────────────────────────
+// TRANSACTIONS
+// ─────────────────────────────────────────────
+
+model Transaction {
+  id String @id @default(cuid())
+
+  userId String
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type TransactionType
+
+  amount Int
+
+  referenceId String?
+  description String?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+// ─────────────────────────────────────────────
+// NOTIFICATIONS
+// ─────────────────────────────────────────────
+
+model Notification {
+  id String @id @default(cuid())
+
+  userId String
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type NotificationType
+
+  title   String
+  message String
+
+  read Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([read])
+  @@index([createdAt])
+}
