@@ -1,34 +1,42 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 
-const TOLERANCE_SECONDS = 300;
+const SASPAY_API_URL = (
+  process.env.SASPAY_API_URL || "https://api.saspay.me/api/v1"
+).replace(/\/+$/, "");
 
-type SasPayWebhook = {
-  event?: unknown;
-  data?: {
-    id?: unknown;
-    reference?: unknown;
-    status?: unknown;
-    amount?: unknown;
-    currency?: unknown;
-  };
-};
+const SASPAY_SECRET_KEY = process.env.SASPAY_SECRET_KEY;
+const SASPAY_WEBHOOK_SECRET = process.env.SASPAY_WEBHOOK_SECRET;
 
 type SasPayPayment = {
-  id?: unknown;
-  status?: unknown;
-  requested_amount?: unknown;
-  currency?: unknown;
+  id?: string;
+  status?: string;
+  currency?: string;
+  network?: string;
+  requested_amount?: string | number;
+  amount?: string | number;
 };
 
-function jsonResponse(
-  message: string,
-  status: number
-) {
+type WebhookPayload = {
+  event?: string;
+  type?: string;
+  data?: {
+    id?: string;
+    payment_id?: string;
+    transaction_id?: string;
+    status?: string;
+  };
+  id?: string;
+  payment_id?: string;
+  transaction_id?: string;
+  status?: string;
+};
+
+function jsonResponse(message: string, status = 200) {
   return NextResponse.json(
     {
-      success: status >= 200 && status < 300,
+      received: status === 200,
       message,
     },
     { status }
@@ -36,454 +44,573 @@ function jsonResponse(
 }
 
 /**
- * Vérifie la signature SasPay à partir du corps HTTP brut.
- * La signature attendue est :
- * HMAC-SHA256(secret, timestamp + "." + rawBody)
+ * Vérifie la signature du webhook SasPay.
  */
 function verifySignature(
   rawBody: string,
-  signature: string,
   timestamp: string,
-  secret: string
+  signatureHeader: string
 ): boolean {
-  if (!/^\d+$/.test(timestamp)) {
+  if (!SASPAY_WEBHOOK_SECRET) {
+    console.error("SASPAY_WEBHOOK_SECRET manquante.");
     return false;
   }
 
-  if (!/^[a-f0-9]{64}$/i.test(signature)) {
+  const signature = signatureHeader
+    .trim()
+    .replace(/^sha256=/i, "");
+
+  if (!/^[a-fA-F0-9]{64}$/.test(signature)) {
     return false;
   }
 
   const timestampNumber = Number(timestamp);
 
-  if (!Number.isSafeInteger(timestampNumber)) {
-    return false;
-  }
-
-  const now = Math.floor(Date.now() / 1000);
-
   if (
-    Math.abs(now - timestampNumber) >
-    TOLERANCE_SECONDS
+    !Number.isSafeInteger(timestampNumber) ||
+    timestampNumber <= 0
   ) {
     return false;
   }
 
-  const expected = createHmac("sha256", secret)
-    .update(`${timestamp}.${rawBody}`, "utf8")
-    .digest();
+  // Accepter les timestamps en secondes ou en millisecondes.
+  const timestampMs =
+    timestampNumber < 1_000_000_000_000
+      ? timestampNumber * 1000
+      : timestampNumber;
 
-  const received = Buffer.from(signature, "hex");
+  // Refuser les webhooks trop anciens ou datés dans le futur.
+  const age = Math.abs(Date.now() - timestampMs);
 
-  if (received.length !== expected.length) {
+  if (age > 5 * 60 * 1000) {
     return false;
   }
 
-  return timingSafeEqual(received, expected);
+  // Format de signature utilisé dans le code existant.
+  const signedContent = `${timestamp}.${rawBody}`;
+
+  const expectedSignature = createHmac(
+    "sha256",
+    SASPAY_WEBHOOK_SECRET
+  )
+    .update(signedContent, "utf8")
+    .digest();
+
+  const receivedSignature = Buffer.from(signature, "hex");
+
+  return (
+    receivedSignature.length === expectedSignature.length &&
+    timingSafeEqual(receivedSignature, expectedSignature)
+  );
 }
 
-export async function POST(request: Request) {
-  try {
-    const webhookSecret =
-      process.env.SASPAY_WEBHOOK_SECRET;
+function normalizeStatus(value: unknown): string {
+  return typeof value === "string"
+    ? value.toUpperCase()
+    : "";
+}
 
-    if (!webhookSecret) {
-      console.error(
-        "SASPAY_WEBHOOK_SECRET est manquante."
-      );
+function amountMatches(
+  amount: unknown,
+  expectedAmount: number
+): boolean {
+  if (
+    typeof amount !== "string" &&
+    typeof amount !== "number"
+  ) {
+    return false;
+  }
 
-      return jsonResponse(
-        "Le webhook n'est pas configuré.",
-        503
-      );
-    }
+  const parsedAmount = Number(amount);
 
-    const signature = request.headers.get(
-      "x-webhook-signature"
-    );
+  return (
+    Number.isFinite(parsedAmount) &&
+    parsedAmount === expectedAmount
+  );
+}
 
-    const timestamp = request.headers.get(
-      "x-webhook-timestamp"
-    );
-
-    const headerEvent = request.headers.get(
-      "x-webhook-event"
-    );
-
-    if (!signature || !timestamp || !headerEvent) {
-      return jsonResponse(
-        "En-têtes du webhook manquants.",
-        401
-      );
-    }
-
-    // Important : lire le corps brut avant de le parser.
-    const rawBody = await request.text();
-
-    if (
-      !verifySignature(
-        rawBody,
-        signature,
-        timestamp,
-        webhookSecret
-      )
-    ) {
-      console.warn(
-        "Signature SasPay invalide ou horodatage expiré."
-      );
-
-      return jsonResponse(
-        "Signature invalide ou notification expirée.",
-        401
-      );
-    }
-
-    let payload: SasPayWebhook;
-
-    try {
-      payload = JSON.parse(rawBody) as SasPayWebhook;
-    } catch {
-      return jsonResponse(
-        "Corps JSON invalide.",
-        400
-      );
-    }
-
-    const event = payload.event;
-    const data = payload.data;
-
-    if (
-      typeof event !== "string" ||
-      event !== headerEvent ||
-      !data ||
-      typeof data.id !== "string" ||
-      data.id.length === 0
-    ) {
-      return jsonResponse(
-        "Format de notification invalide.",
-        400
-      );
-    }
-
-    // Les événements de test ne doivent jamais créditer un compte.
-    if (event === "webhook.test") {
-      return jsonResponse(
-        "Webhook de test reçu.",
-        200
-      );
-    }
-
-    const supportedEvents = [
-      "transaction.success",
-      "transaction.failed",
-      "transaction.cancelled",
-    ];
-
-    if (!supportedEvents.includes(event)) {
-      // Les autres événements ne concernent pas les dépôts.
-      return jsonResponse(
-        "Événement ignoré.",
-        200
-      );
-    }
-
-    const deposit = await prisma.deposit.findFirst({
+/**
+ * Enregistre un dépôt échoué ou annulé et notifie le client.
+ * Le dépôt doit encore être PENDING pour être modifié.
+ */
+async function markDepositFailed(depositId: string) {
+  await prisma.$transaction(async (tx) => {
+    const result = await tx.deposit.updateMany({
       where: {
-        externalId: data.id,
-        provider: "saspay",
+        id: depositId,
+        status: "PENDING",
+      },
+      data: {
+        status: "FAILED",
+      },
+    });
+
+    // Évite les notifications répétées pour le même dépôt.
+    if (result.count !== 1) {
+      return;
+    }
+
+    const deposit = await tx.deposit.findUnique({
+      where: {
+        id: depositId,
+      },
+      select: {
+        id: true,
+        userId: true,
+        amount: true,
       },
     });
 
     if (!deposit) {
-      console.warn(
-        "Dépôt SasPay introuvable pour cette notification."
-      );
-
-      // SasPay pourra retenter la livraison.
-      return jsonResponse(
-        "Dépôt correspondant introuvable.",
-        404
+      throw new Error(
+        "Dépôt introuvable après mise à jour."
       );
     }
 
-    // Si le dépôt a déjà été traité, ne rien créditer de nouveau.
-    if (
-      deposit.status === "SUCCESS" ||
-      deposit.status === "FAILED"
-    ) {
-      return jsonResponse(
-        "Ce dépôt a déjà été traité.",
-        200
-      );
-    }
+    await tx.notification.create({
+      data: {
+        userId: deposit.userId,
+        type: "SYSTEM",
+        title: "Échec du dépôt",
+        message:
+          `Votre dépôt de ${deposit.amount} FCFA a échoué ou a été annulé. ` +
+          "Aucun montant n'a été crédité sur votre solde.",
+      },
+    });
+  });
+}
 
-    const secretKey = process.env.SASPAY_SECRET_KEY;
+/**
+ * Confirme un dépôt après vérification auprès de SasPay.
+ * Le solde n'est crédité qu'une seule fois.
+ */
+async function settleDeposit(payment: SasPayPayment) {
+  if (!payment.id) {
+    return {
+      processed: false,
+      retry: false,
+    };
+  }
 
-    if (!secretKey) {
-      console.error("SASPAY_SECRET_KEY est manquante.");
+  const deposit = await prisma.deposit.findFirst({
+    where: {
+      externalId: payment.id,
+    },
+  });
 
-      return jsonResponse(
-        "Le service SasPay n'est pas configuré.",
-        503
-      );
-    }
-
-    const apiUrl = (
-      process.env.SASPAY_API_URL ||
-      "https://api.saspay.me/api/v1"
-    ).replace(/\/+$/, "");
-
-    /*
-     * Ne jamais créditer un dépôt sur la seule base
-     * du contenu de la notification.
-     *
-     * On vérifie le paiement directement auprès de SasPay.
-     */
-    const verifyResponse = await fetch(
-      `${apiUrl}/payments/${encodeURIComponent(
-        deposit.externalId!
-      )}/verify/`,
-      {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${secretKey}`,
-          Accept: "application/json",
-        },
-        cache: "no-store",
-        signal: AbortSignal.timeout(12000),
-      }
+  if (!deposit) {
+    console.error(
+      "SASPAY_WEBHOOK_DEPOSIT_NOT_FOUND:",
+      payment.id
     );
 
-    const payment: SasPayPayment | null =
-      await verifyResponse
-        .json()
-        .catch(() => null);
+    return {
+      processed: false,
+      retry: true,
+    };
+  }
 
-    if (!verifyResponse.ok || !payment) {
-      console.error("SASPAY_WEBHOOK_VERIFY_ERROR", {
-        depositId: deposit.id,
-        httpStatus: verifyResponse.status,
+  if (deposit.status === "SUCCESS") {
+    // Dépôt déjà crédité.
+    return {
+      processed: true,
+      retry: false,
+    };
+  }
+
+  if (deposit.status === "FAILED") {
+    // Ne pas créditer un dépôt déjà marqué comme échoué.
+    return {
+      processed: false,
+      retry: false,
+    };
+  }
+
+  if (normalizeStatus(payment.status) !== "SUCCESS") {
+    return {
+      processed: false,
+      retry: true,
+    };
+  }
+
+  if (
+    typeof payment.currency !== "string" ||
+    payment.currency.toUpperCase() !== "XOF"
+  ) {
+    console.error(
+      "SASPAY_WEBHOOK_CURRENCY_MISMATCH:",
+      deposit.id
+    );
+
+    return {
+      processed: false,
+      retry: false,
+    };
+  }
+
+  if (
+    typeof payment.network !== "string" ||
+    payment.network.toLowerCase() !==
+      deposit.network.toLowerCase()
+  ) {
+    console.error(
+      "SASPAY_WEBHOOK_NETWORK_MISMATCH:",
+      deposit.id
+    );
+
+    return {
+      processed: false,
+      retry: false,
+    };
+  }
+
+  const providerAmount =
+    payment.requested_amount ?? payment.amount;
+
+  if (!amountMatches(providerAmount, deposit.amount)) {
+    console.error(
+      "SASPAY_WEBHOOK_AMOUNT_MISMATCH:",
+      deposit.id
+    );
+
+    return {
+      processed: false,
+      retry: false,
+    };
+  }
+
+  const processed = await prisma.$transaction(async (tx) => {
+    // Revendiquer le dépôt uniquement s'il est encore en attente.
+    const claimed = await tx.deposit.updateMany({
+      where: {
+        id: deposit.id,
+        status: "PENDING",
+        externalId: payment.id,
+      },
+      data: {
+        status: "SUCCESS",
+      },
+    });
+
+    if (claimed.count !== 1) {
+      // Un autre webhook a peut-être déjà traité ce dépôt.
+      return false;
+    }
+
+    // Créditer le solde d'investissement.
+    await tx.user.update({
+      where: {
+        id: deposit.userId,
+      },
+      data: {
+        investBalance: {
+          increment: deposit.amount,
+        },
+      },
+    });
+
+    // Ajouter le dépôt à l'historique des transactions.
+    await tx.transaction.create({
+      data: {
+        userId: deposit.userId,
+        type: "DEPOSIT",
+        amount: deposit.amount,
+        referenceId: deposit.id,
+        description: "Dépôt confirmé par SasPay",
+      },
+    });
+
+    // Notifier le client.
+    await tx.notification.create({
+      data: {
+        userId: deposit.userId,
+        type: "SYSTEM",
+        title: "Dépôt confirmé",
+        message:
+          `Votre dépôt de ${deposit.amount} FCFA a été confirmé. ` +
+          "Votre solde d'investissement a été crédité.",
+      },
+    });
+
+    /*
+     * Bonus de parrainage :
+     * 500 FCFA, une seule fois, lors du premier dépôt confirmé
+     * du filleul, selon la logique existante du projet.
+     */
+    const referral = await tx.referral.findUnique({
+      where: {
+        referredId: deposit.userId,
+      },
+    });
+
+    if (referral && !referral.rewardGiven) {
+      const rewardAmount = 500;
+
+      // Réserver la récompense de façon atomique.
+      const rewardClaim = await tx.referral.updateMany({
+        where: {
+          id: referral.id,
+          rewardGiven: false,
+        },
+        data: {
+          rewardGiven: true,
+          rewardAmount,
+        },
       });
 
-      return jsonResponse(
-        "Impossible de vérifier le paiement auprès de SasPay.",
-        502
-      );
-    }
-
-    // Vérification de l'identifiant du paiement.
-    if (payment.id !== deposit.externalId) {
-      console.error(
-        "SASPAY_WEBHOOK_ID_MISMATCH",
-        { depositId: deposit.id }
-      );
-
-      return jsonResponse(
-        "Identifiant du paiement incorrect.",
-        409
-      );
-    }
-
-    // Vérification du montant et de la devise.
-    const providerAmount = Number(
-      payment.requested_amount
-    );
-
-    if (
-      payment.requested_amount === undefined ||
-      payment.requested_amount === null ||
-      payment.requested_amount === "" ||
-      !Number.isFinite(providerAmount) ||
-      providerAmount !== deposit.amount ||
-      payment.currency !== "XOF"
-    ) {
-      console.error(
-        "SASPAY_WEBHOOK_PAYMENT_MISMATCH",
-        {
-          depositId: deposit.id,
-          expectedAmount: deposit.amount,
-          providerCurrency: payment.currency,
-        }
-      );
-
-      return jsonResponse(
-        "Le montant ou la devise du paiement ne correspond pas.",
-        409
-      );
-    }
-
-    const providerStatus =
-      typeof payment.status === "string"
-        ? payment.status.toUpperCase()
-        : "";
-
-    /*
-     * Un événement de succès n'est accepté que si
-     * SasPay confirme également le statut SUCCESS.
-     */
-    if (
-      event === "transaction.success" &&
-      providerStatus !== "SUCCESS"
-    ) {
-      console.warn(
-        "Le webhook annonce un succès, mais SasPay ne le confirme pas.",
-        { depositId: deposit.id, providerStatus }
-      );
-
-      return jsonResponse(
-        "Le paiement n'est pas encore confirmé par SasPay.",
-        409
-      );
-    }
-
-    /*
-     * Échec ou annulation :
-     * le statut doit aussi être confirmé par SasPay.
-     */
-    if (
-      event === "transaction.failed" ||
-      event === "transaction.cancelled"
-    ) {
-      const failedStatuses = [
-        "FAILED",
-        "CANCELLED",
-      ];
-
-      if (!failedStatuses.includes(providerStatus)) {
-        return jsonResponse(
-          "Le statut final du paiement n'est pas confirmé.",
-          409
-        );
-      }
-
-      const updateResult =
-        await prisma.deposit.updateMany({
-          where: {
-            id: deposit.id,
-            provider: "saspay",
-            status: "PENDING",
-            externalId: deposit.externalId,
-          },
-          data: {
-            status: "FAILED",
-          },
-        });
-
-      if (updateResult.count === 0) {
-        return jsonResponse(
-          "Le dépôt a déjà été traité.",
-          200
-        );
-      }
-
-      return jsonResponse(
-        "Échec du paiement enregistré.",
-        200
-      );
-    }
-
-    // Un statut inconnu ne doit jamais modifier le solde.
-    if (providerStatus !== "SUCCESS") {
-      return jsonResponse(
-        "Le paiement est toujours en attente de confirmation.",
-        200
-      );
-    }
-
-    /*
-     * Crédit atomique :
-     * 1. Le dépôt passe de PENDING à SUCCESS.
-     * 2. Le solde est incrémenté.
-     * 3. La transaction est enregistrée.
-     * 4. La notification est créée.
-     *
-     * Toutes ces opérations sont effectuées dans
-     * une seule transaction PostgreSQL.
-     */
-    const result = await prisma.$transaction(
-      async (tx) => {
-        const updateResult =
-          await tx.deposit.updateMany({
-            where: {
-              id: deposit.id,
-              provider: "saspay",
-              status: "PENDING",
-              externalId: deposit.externalId,
-            },
-            data: {
-              status: "SUCCESS",
-            },
-          });
-
-        if (updateResult.count === 0) {
-          const latestDeposit =
-            await tx.deposit.findUnique({
-              where: { id: deposit.id },
-              select: { status: true },
-            });
-
-          return {
-            creditedNow: false,
-            status: latestDeposit?.status ?? "PENDING",
-          };
-        }
-
+      if (rewardClaim.count === 1) {
         await tx.user.update({
           where: {
-            id: deposit.userId,
+            id: referral.referrerId,
           },
           data: {
-            investBalance: {
-              increment: deposit.amount,
+            withdrawBalance: {
+              increment: rewardAmount,
             },
           },
         });
 
         await tx.transaction.create({
           data: {
-            userId: deposit.userId,
-            type: "DEPOSIT",
-            amount: deposit.amount,
+            userId: referral.referrerId,
+            type: "REFERRAL_REWARD",
+            amount: rewardAmount,
             referenceId: deposit.id,
             description:
-              `Dépôt SasPay confirmé (${deposit.network})`,
+              "Bonus de 500 FCFA pour le premier dépôt du filleul",
           },
         });
 
         await tx.notification.create({
           data: {
-            userId: deposit.userId,
-            type: "SYSTEM",
-            title: "Dépôt confirmé",
+            userId: referral.referrerId,
+            type: "REFERRAL",
+            title: "Bonus de parrainage reçu",
             message:
-              `Ton dépôt de ${deposit.amount} FCFA a été confirmé et ajouté à ton solde d'investissement.`,
+              "Vous avez reçu 500 FCFA sur votre solde de retrait grâce au premier dépôt de votre filleul.",
           },
         });
+      }
+    }
 
-        return {
-          creditedNow: true,
-          status: "SUCCESS",
-        };
+    return true;
+  });
+
+  return {
+    processed: true,
+    retry: false,
+    newlyProcessed: processed,
+  };
+}
+
+/**
+ * Point d'entrée du webhook SasPay.
+ */
+export async function POST(request: NextRequest) {
+  try {
+    if (!SASPAY_WEBHOOK_SECRET || !SASPAY_SECRET_KEY) {
+      console.error(
+        "Configuration SasPay incomplète : clé API ou secret webhook absent."
+      );
+
+      return jsonResponse(
+        "Configuration du webhook indisponible.",
+        500
+      );
+    }
+
+    const signature =
+      request.headers.get("X-Webhook-Signature") ?? "";
+
+    const timestamp =
+      request.headers.get("X-Webhook-Timestamp") ?? "";
+
+    const headerEvent =
+      request.headers.get("X-Webhook-Event") ?? "";
+
+    // Lire le corps brut avant le parsing JSON.
+    const rawBody = await request.text();
+
+    if (
+      !signature ||
+      !timestamp ||
+      !verifySignature(rawBody, timestamp, signature)
+    ) {
+      console.warn("SASPAY_WEBHOOK_INVALID_SIGNATURE");
+
+      return jsonResponse("Signature invalide.", 401);
+    }
+
+    let payload: WebhookPayload;
+
+    try {
+      payload = JSON.parse(rawBody) as WebhookPayload;
+    } catch {
+      return jsonResponse("Corps JSON invalide.", 400);
+    }
+
+    const event =
+      headerEvent || payload.event || payload.type || "";
+
+    if (
+      headerEvent &&
+      payload.event &&
+      headerEvent !== payload.event
+    ) {
+      return jsonResponse(
+        "L'événement de l'en-tête ne correspond pas au corps.",
+        400
+      );
+    }
+
+    // Événement de test.
+    if (event === "webhook.test") {
+      return jsonResponse("Webhook de test reçu.");
+    }
+
+    const supportedEvents = [
+      "transaction.success",
+      "transaction.failed",
+      "transaction.cancelled",
+      "transaction.created",
+    ];
+
+    if (!supportedEvents.includes(event)) {
+      return jsonResponse("Événement ignoré.");
+    }
+
+    const paymentId =
+      payload.data?.id ??
+      payload.data?.payment_id ??
+      payload.data?.transaction_id ??
+      payload.payment_id ??
+      payload.transaction_id ??
+      payload.id;
+
+    if (!paymentId) {
+      return jsonResponse(
+        "Référence de paiement manquante.",
+        400
+      );
+    }
+
+    const deposit = await prisma.deposit.findFirst({
+      where: {
+        externalId: paymentId,
+      },
+    });
+
+    if (!deposit) {
+      console.warn(
+        "SASPAY_WEBHOOK_UNKNOWN_PAYMENT:",
+        paymentId
+      );
+
+      // Demander une nouvelle tentative à SasPay.
+      return jsonResponse(
+        "Dépôt introuvable. Nouvelle tentative nécessaire.",
+        500
+      );
+    }
+
+    // Paiement échoué.
+    if (event === "transaction.failed") {
+      await markDepositFailed(deposit.id);
+
+      return jsonResponse("Échec du paiement enregistré.");
+    }
+
+    // Paiement annulé.
+    if (event === "transaction.cancelled") {
+      await markDepositFailed(deposit.id);
+
+      return jsonResponse("Annulation du paiement enregistrée.");
+    }
+
+    // Paiement créé, mais pas encore confirmé.
+    if (event === "transaction.created") {
+      return jsonResponse("Paiement en attente.");
+    }
+
+    /*
+     * Pour un événement de succès, vérifier le paiement
+     * auprès de l'API officielle SasPay avant tout crédit.
+     */
+    const verificationResponse = await fetch(
+      `${SASPAY_API_URL}/payments/${encodeURIComponent(
+        paymentId
+      )}/verify/`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${SASPAY_SECRET_KEY}`,
+          Accept: "application/json",
+        },
+        cache: "no-store",
+        signal: AbortSignal.timeout(15000),
       }
     );
 
-    console.info("SASPAY_WEBHOOK_PROCESSED", {
-      depositId: deposit.id,
-      status: result.status,
-      creditedNow: result.creditedNow,
-    });
+    if (!verificationResponse.ok) {
+      console.error(
+        "SASPAY_WEBHOOK_VERIFY_ERROR:",
+        verificationResponse.status,
+        await verificationResponse.text().catch(() => "")
+      );
 
-    return jsonResponse(
-      result.creditedNow
-        ? "Paiement confirmé et solde crédité."
-        : "Ce dépôt a déjà été traité.",
-      200
-    );
+      return jsonResponse(
+        "Vérification SasPay temporairement impossible.",
+        500
+      );
+    }
+
+    const verificationResult =
+      await verificationResponse.json();
+
+    const payment = (
+      verificationResult?.data &&
+      typeof verificationResult.data === "object"
+        ? verificationResult.data
+        : verificationResult
+    ) as SasPayPayment;
+
+    if (payment.id !== paymentId) {
+      console.error(
+        "SASPAY_WEBHOOK_PAYMENT_ID_MISMATCH:",
+        paymentId
+      );
+
+      return jsonResponse(
+        "Référence de paiement incohérente.",
+        400
+      );
+    }
+
+    if (normalizeStatus(payment.status) !== "SUCCESS") {
+      return jsonResponse(
+        "Paiement pas encore confirmé par SasPay."
+      );
+    }
+
+    const result = await settleDeposit(payment);
+
+    if (result.retry) {
+      return jsonResponse(
+        "Le paiement n'a pas encore pu être traité.",
+        500
+      );
+    }
+
+    if (!result.processed) {
+      return jsonResponse(
+        "Le paiement n'a pas pu être validé.",
+        400
+      );
+    }
+
+    return jsonResponse("Paiement traité avec succès.");
   } catch (error) {
-    console.error(
-      "SASPAY_WEBHOOK_ERROR:",
-      error
-    );
+    console.error("SASPAY_WEBHOOK_ERROR:", error);
 
     return jsonResponse(
       "Erreur interne lors du traitement du webhook.",

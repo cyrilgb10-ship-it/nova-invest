@@ -57,6 +57,11 @@ export async function POST(request: NextRequest) {
         ? body.phone.trim()
         : "";
 
+    const email =
+      typeof body.email === "string"
+        ? body.email.trim().toLowerCase()
+        : "";
+
     const password =
       typeof body.password === "string"
         ? body.password
@@ -67,12 +72,13 @@ export async function POST(request: NextRequest) {
         ? body.referralCode.trim()
         : "";
 
-    // Validation
+    // Vérification des champs obligatoires
     if (
       !username ||
       !lastName ||
       !firstName ||
       !phone ||
+      !email ||
       !password
     ) {
       return NextResponse.json(
@@ -83,6 +89,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Vérification du pseudo
     if (username.length < 3) {
       return NextResponse.json(
         {
@@ -92,6 +99,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Vérification de l'adresse e-mail
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!emailRegex.test(email)) {
+      return NextResponse.json(
+        {
+          error: "Veuillez saisir une adresse e-mail valide.",
+        },
+        { status: 400 }
+      );
+    }
+
+    // Vérification du mot de passe
     if (password.length < 6) {
       return NextResponse.json(
         {
@@ -117,7 +137,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Vérification du numéro
+    // Vérification du numéro de téléphone
     const existingPhone = await prisma.user.findUnique({
       where: {
         phone,
@@ -128,6 +148,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error: "Ce numéro est déjà associé à un compte.",
+        },
+        { status: 409 }
+      );
+    }
+
+    // Vérification de l'adresse e-mail
+    const existingEmail = await prisma.user.findUnique({
+      where: {
+        email,
+      },
+    });
+
+    if (existingEmail) {
+      return NextResponse.json(
+        {
+          error: "Cette adresse e-mail est déjà utilisée.",
         },
         { status: 409 }
       );
@@ -157,14 +193,14 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Sécurité : hash du mot de passe
+    // Hachage du mot de passe
     const passwordHash = await bcrypt.hash(password, 12);
 
-    // Génération du code personnel
+    // Génération du code de parrainage personnel
     const userReferralCode =
       await createUniqueReferralCode();
 
-    // Création du compte + parrainage dans une transaction
+    // Création du compte et du parrainage
     const user = await prisma.$transaction(async (tx) => {
       const createdUser = await tx.user.create({
         data: {
@@ -172,6 +208,7 @@ export async function POST(request: NextRequest) {
           firstName,
           lastName,
           phone,
+          email,
           passwordHash,
           referralCode: userReferralCode,
           referredById: referrer?.id ?? null,
@@ -202,6 +239,7 @@ export async function POST(request: NextRequest) {
         firstName: user.firstName,
         lastName: user.lastName,
         phone: user.phone,
+        email: user.email,
         referralCode: user.referralCode,
       },
     });

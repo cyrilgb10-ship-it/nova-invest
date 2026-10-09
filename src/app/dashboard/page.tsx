@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import NotificationBell from "@/components/NotificationBell";
+import DailyRewardCard from "@/components/DailyRewardCard";
 
 export const instant = false;
 
@@ -41,7 +42,7 @@ export default async function DashboardPage() {
 
             {/* Profile */}
             <Link
-              href="/account"
+              href="/profile"
               className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-[#18d5c4] to-[#1689d7] font-bold text-[#041018]"
             >
               {user.firstName.charAt(0).toUpperCase()}
@@ -192,6 +193,10 @@ export default async function DashboardPage() {
           </div>
 
           {/* Overview */}
+          {/* Récompense quotidienne */}
+          <div className="mt-6">
+           <DailyRewardCard />
+          </div>
           
 
           {/* Empty investment state */}
@@ -209,6 +214,7 @@ export default async function DashboardPage() {
                     et faire travailler votre argent.
                   </p>
                 </div>
+            
 
                 <Link
                   href="/products"
@@ -312,7 +318,7 @@ export default async function DashboardPage() {
           </Link>
 
           <Link
-            href="/account"
+            href="/profile"
             className="flex min-w-[58px] flex-1 flex-col items-center gap-1 rounded-2xl py-2 text-slate-500 transition hover:text-white"
           >
             <svg

@@ -40,6 +40,7 @@ enum TransactionType {
   REFERRAL_REWARD
   INVESTMENT
   INVESTMENT_RETURN
+  DAILY_REWARD
 }
 
 enum NotificationType {
@@ -59,7 +60,9 @@ model User {
   firstName    String
   lastName     String
   phone        String @unique
+  email        String? @unique
   passwordHash String
+  
 
   role UserRole @default(USER)
 
@@ -80,6 +83,7 @@ model User {
   withdrawals  Withdrawal[]
   transactions Transaction[]
   notifications Notification[]
+  dailyRewards DailyReward[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -294,4 +298,22 @@ model Notification {
   @@index([userId])
   @@index([read])
   @@index([createdAt])
+}
+// ─────────────────────────────────────────────
+// RÉCOMPENSES QUOTIDIENNES
+// ─────────────────────────────────────────────
+
+model DailyReward {
+  id        String   @id @default(cuid())
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  amount    Int      @default(100)
+  rewardDate String
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, rewardDate])
+  @@index([userId])
 }

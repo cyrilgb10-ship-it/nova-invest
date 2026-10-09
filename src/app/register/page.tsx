@@ -12,6 +12,7 @@ export default function RegisterPage() {
     lastName: "",
     firstName: "",
     phone: "",
+    email: "",
     password: "",
   });
 
@@ -48,6 +49,7 @@ export default function RegisterPage() {
         },
         body: JSON.stringify({
           ...form,
+          email: form.email.trim().toLowerCase(),
           referralCode: referralCode || null,
         }),
       });
@@ -70,6 +72,9 @@ export default function RegisterPage() {
     }
   }
 
+  const inputClass =
+    "h-12 w-full rounded-xl border border-white/10 bg-white/[0.05] px-4 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-cyan-400/50 focus:bg-white/[0.07]";
+
   return (
     <main className="min-h-screen bg-[#06141c] text-white">
       <div className="absolute inset-0 overflow-hidden">
@@ -79,13 +84,9 @@ export default function RegisterPage() {
 
       <div className="relative flex min-h-screen items-center justify-center px-5 py-10">
         <div className="w-full max-w-lg">
-
           {/* Logo */}
           <div className="mb-8 text-center">
-            <Link
-              href="/"
-              className="inline-flex items-center gap-3"
-            >
+            <Link href="/" className="inline-flex items-center gap-3">
               <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-300 to-cyan-500 text-xl font-black text-[#06141c] shadow-lg shadow-cyan-500/20">
                 N
               </div>
@@ -98,7 +99,6 @@ export default function RegisterPage() {
 
           {/* Formulaire */}
           <div className="rounded-[2rem] border border-white/10 bg-white/[0.04] p-6 shadow-2xl shadow-black/30 backdrop-blur-xl sm:p-8">
-
             <div className="mb-7">
               <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
                 Créer votre compte
@@ -145,7 +145,6 @@ export default function RegisterPage() {
             )}
 
             <form onSubmit={handleSubmit} className="space-y-5">
-
               {/* Pseudo + Numéro */}
               <div className="grid gap-5 sm:grid-cols-2">
                 <div>
@@ -161,8 +160,9 @@ export default function RegisterPage() {
                     }
                     placeholder="Votre pseudo"
                     required
+                    minLength={3}
                     autoComplete="username"
-                    className="h-12 w-full rounded-xl border border-white/10 bg-white/[0.05] px-4 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-cyan-400/50 focus:bg-white/[0.07]"
+                    className={inputClass}
                   />
                 </div>
 
@@ -180,7 +180,7 @@ export default function RegisterPage() {
                     placeholder="+228 90 00 00 00"
                     required
                     autoComplete="tel"
-                    className="h-12 w-full rounded-xl border border-white/10 bg-white/[0.05] px-4 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-cyan-400/50 focus:bg-white/[0.07]"
+                    className={inputClass}
                   />
                 </div>
               </div>
@@ -201,7 +201,7 @@ export default function RegisterPage() {
                     placeholder="Votre nom"
                     required
                     autoComplete="family-name"
-                    className="h-12 w-full rounded-xl border border-white/10 bg-white/[0.05] px-4 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-cyan-400/50 focus:bg-white/[0.07]"
+                    className={inputClass}
                   />
                 </div>
 
@@ -219,9 +219,33 @@ export default function RegisterPage() {
                     placeholder="Votre prénom"
                     required
                     autoComplete="given-name"
-                    className="h-12 w-full rounded-xl border border-white/10 bg-white/[0.05] px-4 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-cyan-400/50 focus:bg-white/[0.07]"
+                    className={inputClass}
                   />
                 </div>
+              </div>
+
+              {/* Adresse e-mail */}
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-300">
+                  Adresse e-mail
+                </label>
+
+                <input
+                  type="email"
+                  value={form.email}
+                  onChange={(e) =>
+                    updateField("email", e.target.value)
+                  }
+                  placeholder="exemple@gmail.com"
+                  required
+                  autoComplete="email"
+                  className={inputClass}
+                />
+
+                <p className="mt-2 text-xs text-slate-500">
+                  Cette adresse sera utilisée automatiquement pour vos
+                  paiements SasPay.
+                </p>
               </div>
 
               {/* Mot de passe */}
@@ -241,7 +265,7 @@ export default function RegisterPage() {
                     required
                     minLength={6}
                     autoComplete="new-password"
-                    className="h-12 w-full rounded-xl border border-white/10 bg-white/[0.05] px-4 pr-24 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-cyan-400/50 focus:bg-white/[0.07]"
+                    className={`${inputClass} pr-24`}
                   />
 
                   <button
@@ -266,9 +290,7 @@ export default function RegisterPage() {
                 disabled={loading}
                 className="h-13 w-full rounded-xl bg-cyan-400 px-5 text-sm font-bold text-[#06141c] shadow-lg shadow-cyan-500/20 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {loading
-                  ? "Création du compte..."
-                  : "Créer mon compte"}
+                {loading ? "Création du compte..." : "Créer mon compte"}
               </button>
             </form>
 
