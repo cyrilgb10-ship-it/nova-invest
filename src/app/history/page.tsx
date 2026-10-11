@@ -47,7 +47,7 @@ const items = [
 { label: "Produits", href: "/products", icon: "◇" },
 { label: "Investissements", href: "/investments", icon: "↗" },
 { label: "Historique", href: "/history", icon: "◷" },
-{ label: "Mon compte", href: "/account", icon: "◎" },
+{ label: "Mon compte", href: "/profile", icon: "◎" },
 ];
 
 return ( <nav className="fixed inset-x-0 bottom-0 z-40 px-3 pb-3"> <div className="mx-auto flex max-w-xl items-center justify-between rounded-3xl border border-white/10 bg-[#071923]/95 px-2 py-2 shadow-2xl shadow-black/30 backdrop-blur-xl">
