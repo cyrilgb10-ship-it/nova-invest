@@ -248,22 +248,6 @@ async function settleDeposit(payment: SasPayPayment) {
     };
   }
 
-  if (
-    typeof payment.network !== "string" ||
-    payment.network.toLowerCase() !==
-      deposit.network.toLowerCase()
-  ) {
-    console.error(
-      "SASPAY_WEBHOOK_NETWORK_MISMATCH:",
-      deposit.id
-    );
-
-    return {
-      processed: false,
-      retry: false,
-    };
-  }
-
   const providerAmount =
     payment.requested_amount ?? payment.amount;
 

@@ -142,6 +142,17 @@ export async function GET(
 
     const providerStatus = normalizeStatus(payment.status);
 
+    console.log("DIAGNOSTIC_SASPAY_DEPOT:", {
+     depositId: deposit.id,
+     externalId: deposit.externalId,
+     depositStatus: deposit.status,
+     expectedAmount: deposit.amount,
+     providerStatus: payment.status,
+     providerAmount: payment.requested_amount ?? payment.amount,
+     providerCurrency: payment.currency,
+     providerNetwork: payment.network,
+    });
+
     if (
       payment.id &&
       payment.id !== deposit.externalId
@@ -171,22 +182,7 @@ export async function GET(
         { status: 400 }
       );
     }
-
-    if (
-      payment.network &&
-      payment.network.toLowerCase() !== deposit.network.toLowerCase()
-    ) {
-      console.error("SASPAY_NETWORK_MISMATCH:", deposit.id);
-
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Le réseau du paiement ne correspond pas.",
-        },
-        { status: 400 }
-      );
-    }
-
+   
     if (
       providerStatus === "FAILED" ||
       providerStatus === "CANCELLED"
