@@ -43,6 +43,7 @@ export default async function DashboardPage() {
             {/* Profile */}
             <Link
               href="/profile"
+              aria-label="Mon compte"
               className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-[#18d5c4] to-[#1689d7] font-bold text-[#041018]"
             >
               {user.firstName.charAt(0).toUpperCase()}
@@ -126,7 +127,8 @@ export default async function DashboardPage() {
           </div>
 
           {/* Quick actions */}
-          <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+            {/* Investir */}
             <Link
               href="/products"
               className="group rounded-2xl border border-white/10 bg-white/[0.035] p-5 transition hover:border-[#18d5c4]/30 hover:bg-white/[0.055]"
@@ -142,9 +144,10 @@ export default async function DashboardPage() {
               </p>
             </Link>
 
+            {/* Déposer */}
             <Link
               href="/deposit"
-              className="group rounded-2xl border border-white/10 bg-white/[0.035] p-5 transition hover:border-[#18d5c4]/30 hover:bg-white/[0.055]"
+              className="group rounded-2xl border border-white/10 bg-white/[0.035] p-5 transition hover:border-blue-400/30 hover:bg-white/[0.055]"
             >
               <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-500/10 text-blue-300">
                 +
@@ -157,47 +160,79 @@ export default async function DashboardPage() {
               </p>
             </Link>
 
+            {/* Investissements */}
             <Link
               href="/investments"
-              className="group rounded-2xl border border-white/10 bg-white/[0.035] p-5 transition hover:border-[#18d5c4]/30 hover:bg-white/[0.055]"
+              className="group rounded-2xl border border-white/10 bg-white/[0.035] p-5 transition hover:border-purple-400/30 hover:bg-white/[0.055]"
             >
               <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-purple-500/10 text-purple-300">
                 ◷
               </div>
 
-              <p className="mt-4 font-semibold">
-                Investissements
-              </p>
+              <p className="mt-4 font-semibold">Investissements</p>
 
               <p className="mt-1 text-xs text-slate-500">
                 Suivre mes placements
               </p>
             </Link>
 
+            {/* Historique */}
             <Link
               href="/history"
-              className="group rounded-2xl border border-white/10 bg-white/[0.035] p-5 transition hover:border-[#18d5c4]/30 hover:bg-white/[0.055]"
+              className="group rounded-2xl border border-white/10 bg-white/[0.035] p-5 transition hover:border-amber-400/30 hover:bg-white/[0.055]"
             >
               <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-500/10 text-amber-300">
                 ≡
               </div>
 
-              <p className="mt-4 font-semibold">
-                Historique
-              </p>
+              <p className="mt-4 font-semibold">Historique</p>
 
               <p className="mt-1 text-xs text-slate-500">
                 Mes opérations
               </p>
             </Link>
+
+            {/* VIP */}
+            <Link
+              href="/vip"
+              className="group relative overflow-hidden rounded-2xl border border-amber-400/20 bg-gradient-to-br from-amber-400/10 via-white/[0.035] to-orange-500/5 p-5 transition hover:border-amber-400/50 hover:bg-amber-400/[0.08]"
+            >
+              <div className="absolute -right-8 -top-8 h-24 w-24 rounded-full bg-amber-400/10 blur-2xl transition group-hover:bg-amber-400/20" />
+
+              <div className="relative">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-amber-400/20 bg-amber-400/10 text-amber-300">
+                  <svg
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                  >
+                    <path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9L12 3Z" />
+                  </svg>
+                </div>
+
+                <p className="mt-4 font-semibold text-amber-200">
+                  Espace VIP
+                </p>
+
+                <p className="mt-1 text-xs text-slate-400">
+                  Niveaux VIP et salaires
+                </p>
+
+                <div className="mt-4 inline-flex items-center gap-2 text-xs font-semibold text-amber-300">
+                  Découvrir
+                  <span aria-hidden="true">→</span>
+                </div>
+              </div>
+            </Link>
           </div>
 
-          {/* Overview */}
           {/* Récompense quotidienne */}
           <div className="mt-6">
-           <DailyRewardCard />
+            <DailyRewardCard />
           </div>
-          
 
           {/* Empty investment state */}
           <div className="mt-8 overflow-hidden rounded-3xl border border-white/10 bg-white/[0.035]">
@@ -214,7 +249,6 @@ export default async function DashboardPage() {
                     et faire travailler votre argent.
                   </p>
                 </div>
-            
 
                 <Link
                   href="/products"
@@ -229,11 +263,12 @@ export default async function DashboardPage() {
       </div>
 
       {/* Fixed bottom navbar */}
-      <nav className="fixed bottom-0 left-0 right-0 z-50 px-3 pb-3">
-        <div className="mx-auto flex max-w-xl items-center justify-around rounded-3xl border border-white/10 bg-[#071923]/95 px-2 py-2 shadow-2xl shadow-black/30 backdrop-blur-xl">
+      <nav className="fixed bottom-0 left-0 right-0 z-50 px-2 pb-3">
+        <div className="mx-auto flex max-w-2xl items-center justify-between gap-0.5 overflow-x-auto rounded-3xl border border-white/10 bg-[#071923]/95 px-1 py-2 shadow-2xl shadow-black/30 backdrop-blur-xl">
+          {/* Accueil */}
           <Link
             href="/dashboard"
-            className="flex min-w-[58px] flex-1 flex-col items-center gap-1 rounded-2xl py-2 text-[#18d5c4]"
+            className="flex min-w-0 flex-1 flex-col items-center gap-1 rounded-2xl py-2 text-[#18d5c4]"
           >
             <svg
               width="21"
@@ -248,14 +283,13 @@ export default async function DashboardPage() {
               <path d="M9 20v-6h6v6" />
             </svg>
 
-            <span className="text-[10px] font-medium">
-              Accueil
-            </span>
+            <span className="text-[10px] font-medium">Accueil</span>
           </Link>
 
+          {/* Produits */}
           <Link
             href="/products"
-            className="flex min-w-[58px] flex-1 flex-col items-center gap-1 rounded-2xl py-2 text-slate-500 transition hover:text-white"
+            className="flex min-w-0 flex-1 flex-col items-center gap-1 rounded-2xl py-2 text-slate-500 transition hover:text-white"
           >
             <svg
               width="21"
@@ -269,14 +303,32 @@ export default async function DashboardPage() {
               <path d="M17 7H9.5a3.5 3.5 0 0 0 0 7H14a3.5 3.5 0 0 1 0 7H6" />
             </svg>
 
-            <span className="text-[10px] font-medium">
-              Produits
-            </span>
+            <span className="text-[10px] font-medium">Produits</span>
           </Link>
 
+          {/* VIP */}
+          <Link
+            href="/vip"
+            className="flex min-w-0 flex-1 flex-col items-center gap-1 rounded-2xl py-2 text-amber-300 transition hover:bg-amber-400/10 hover:text-amber-200"
+          >
+            <svg
+              width="21"
+              height="21"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+            >
+              <path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9L12 3Z" />
+            </svg>
+
+            <span className="text-[10px] font-medium">VIP</span>
+          </Link>
+
+          {/* Investissements */}
           <Link
             href="/investments"
-            className="flex min-w-[58px] flex-1 flex-col items-center gap-1 rounded-2xl py-2 text-slate-500 transition hover:text-white"
+            className="flex min-w-0 flex-1 flex-col items-center gap-1 rounded-2xl py-2 text-slate-500 transition hover:text-white"
           >
             <svg
               width="21"
@@ -290,14 +342,13 @@ export default async function DashboardPage() {
               <path d="M12 7v5l3 2" />
             </svg>
 
-            <span className="text-[10px] font-medium">
-              Investissements
-            </span>
+            <span className="text-[10px] font-medium">Investir</span>
           </Link>
 
+          {/* Historique */}
           <Link
             href="/history"
-            className="flex min-w-[58px] flex-1 flex-col items-center gap-1 rounded-2xl py-2 text-slate-500 transition hover:text-white"
+            className="flex min-w-0 flex-1 flex-col items-center gap-1 rounded-2xl py-2 text-slate-500 transition hover:text-white"
           >
             <svg
               width="21"
@@ -312,14 +363,13 @@ export default async function DashboardPage() {
               <path d="M4 18h16" />
             </svg>
 
-            <span className="text-[10px] font-medium">
-              Historique
-            </span>
+            <span className="text-[10px] font-medium">Historique</span>
           </Link>
 
+          {/* Mon compte */}
           <Link
             href="/profile"
-            className="flex min-w-[58px] flex-1 flex-col items-center gap-1 rounded-2xl py-2 text-slate-500 transition hover:text-white"
+            className="flex min-w-0 flex-1 flex-col items-center gap-1 rounded-2xl py-2 text-slate-500 transition hover:text-white"
           >
             <svg
               width="21"
@@ -333,9 +383,7 @@ export default async function DashboardPage() {
               <path d="M5 20c.8-3.2 3.3-5 7-5s6.2 1.8 7 5" />
             </svg>
 
-            <span className="text-[10px] font-medium">
-              Mon compte
-            </span>
+            <span className="text-[10px] font-medium">Mon compte</span>
           </Link>
         </div>
       </nav>

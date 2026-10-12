@@ -197,48 +197,141 @@ export default async function ProductsPage() {
       </section>
 
       {/* Bottom navigation */}
-      <nav className="fixed bottom-4 left-4 right-4 z-50 mx-auto max-w-xl rounded-3xl border border-white/10 bg-[#071827]/95 p-2 shadow-2xl backdrop-blur-xl">
-        <div className="grid grid-cols-5 gap-1">
+      <nav className="fixed bottom-3 left-2 right-2 z-50 mx-auto max-w-2xl rounded-3xl border border-white/10 bg-[#071827]/95 p-2 shadow-2xl backdrop-blur-xl">
+        <div className="flex items-center justify-around gap-1">
+          {/* Accueil */}
           <Link
             href="/dashboard"
-            className="flex flex-col items-center gap-1 rounded-2xl px-2 py-2.5 text-slate-400 transition hover:text-white"
+            className="flex min-w-0 flex-1 flex-col items-center gap-1 rounded-2xl px-1 py-2.5 text-slate-400 transition hover:text-white"
           >
-            <span className="text-lg">⌂</span>
-            <span className="text-[10px] font-medium">Accueil</span>
+            <svg
+              width="21"
+              height="21"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+            >
+              <path d="m3 10 9-7 9 7" />
+              <path d="M5 9v11h14V9" />
+              <path d="M9 20v-6h6v6" />
+            </svg>
+
+            <span className="whitespace-nowrap text-[9px] font-medium sm:text-[10px]">
+              Accueil
+            </span>
           </Link>
 
+          {/* Produits actif */}
           <Link
             href="/products"
-            className="flex flex-col items-center gap-1 rounded-2xl bg-cyan-500/15 px-2 py-2.5 text-cyan-300"
+            aria-current="page"
+            className="flex min-w-0 flex-1 flex-col items-center gap-1 rounded-2xl bg-cyan-500/15 px-1 py-2.5 text-cyan-300"
           >
-            <span className="text-lg">◈</span>
-            <span className="text-[10px] font-semibold">Produits</span>
+            <svg
+              width="21"
+              height="21"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+            >
+              <path d="M12 3v18" />
+              <path d="M17 7H9.5a3.5 3.5 0 0 0 0 7H14a3.5 3.5 0 0 1 0 7H6" />
+            </svg>
+
+            <span className="whitespace-nowrap text-[9px] font-semibold sm:text-[10px]">
+              Produits
+            </span>
           </Link>
 
+          {/* VIP */}
+          <Link
+            href="/vip"
+            className="flex min-w-0 flex-1 flex-col items-center gap-1 rounded-2xl px-1 py-2.5 text-amber-400 transition hover:bg-amber-400/10 hover:text-amber-300"
+          >
+            <svg
+              width="21"
+              height="21"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+            >
+              <path d="m2 7 5 4 5-7 5 7 5-4-2 13H4L2 7Z" />
+              <path d="M4 20h16" />
+            </svg>
+
+            <span className="whitespace-nowrap text-[9px] font-bold sm:text-[10px]">
+              VIP
+            </span>
+          </Link>
+
+          {/* Investissements */}
           <Link
             href="/investments"
-            className="flex flex-col items-center gap-1 rounded-2xl px-2 py-2.5 text-slate-400 transition hover:text-white"
+            className="flex min-w-0 flex-1 flex-col items-center gap-1 rounded-2xl px-1 py-2.5 text-slate-400 transition hover:text-white"
           >
-            <span className="text-lg">↗</span>
-            <span className="text-[10px] font-medium">
+            <svg
+              width="21"
+              height="21"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+            >
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 7v5l3 2" />
+            </svg>
+
+            <span className="whitespace-nowrap text-[9px] font-medium sm:text-[10px]">
               Investissements
             </span>
           </Link>
 
+          {/* Historique */}
           <Link
             href="/history"
-            className="flex flex-col items-center gap-1 rounded-2xl px-2 py-2.5 text-slate-400 transition hover:text-white"
+            className="flex min-w-0 flex-1 flex-col items-center gap-1 rounded-2xl px-1 py-2.5 text-slate-400 transition hover:text-white"
           >
-            <span className="text-lg">◷</span>
-            <span className="text-[10px] font-medium">Historique</span>
+            <svg
+              width="21"
+              height="21"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+            >
+              <path d="M4 6h16" />
+              <path d="M4 12h16" />
+              <path d="M4 18h16" />
+            </svg>
+
+            <span className="whitespace-nowrap text-[9px] font-medium sm:text-[10px]">
+              Historique
+            </span>
           </Link>
 
+          {/* Mon compte */}
           <Link
-            href="/account"
-            className="flex flex-col items-center gap-1 rounded-2xl px-2 py-2.5 text-slate-400 transition hover:text-white"
+            href="/profile"
+            className="flex min-w-0 flex-1 flex-col items-center gap-1 rounded-2xl px-1 py-2.5 text-slate-400 transition hover:text-white"
           >
-            <span className="text-lg">◎</span>
-            <span className="text-[10px] font-medium">Mon compte</span>
+            <svg
+              width="21"
+              height="21"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+            >
+              <circle cx="12" cy="8" r="3.5" />
+              <path d="M5 20c.8-3.2 3.3-5 7-5s6.2 1.8 7 5" />
+            </svg>
+
+            <span className="whitespace-nowrap text-[9px] font-medium sm:text-[10px]">
+              Mon compte
+            </span>
           </Link>
         </div>
       </nav>

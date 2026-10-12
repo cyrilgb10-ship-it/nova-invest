@@ -41,6 +41,7 @@ enum TransactionType {
   INVESTMENT
   INVESTMENT_RETURN
   DAILY_REWARD
+  VIP_SALARY
 }
 
 enum NotificationType {
@@ -62,34 +63,42 @@ model User {
   phone        String @unique
   email        String? @unique
   passwordHash String
-  
 
   role UserRole @default(USER)
 
   investBalance   Int @default(0)
   withdrawBalance Int @default(0)
 
+  // Système VIP
+  // 0 = aucun VIP, 1 = VIP 1, 2 = VIP 2, 3 = VIP 3
+  vipLevel       Int       @default(0)
+  vipActivatedAt DateTime?
+
   referralCode String @unique
 
   referredById String?
-  referredBy   User? @relation("UserSponsor", fields: [referredById], references: [id])
+  referredBy   User?  @relation("UserSponsor", fields: [referredById], references: [id])
   referredUsers User[] @relation("UserSponsor")
 
   referralsGiven    Referral[] @relation("Referrer")
   referralsReceived Referral[] @relation("Referred")
 
-  investments  Investment[]
-  deposits     Deposit[]
-  withdrawals  Withdrawal[]
-  transactions Transaction[]
+  investments   Investment[]
+  deposits      Deposit[]
+  withdrawals   Withdrawal[]
+  transactions  Transaction[]
   notifications Notification[]
-  dailyRewards DailyReward[]
+  dailyRewards  DailyReward[]
+
+  // Activations VIP de l'utilisateur
+  vipActivations VipActivation[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([referredById])
   @@index([role])
+  @@index([vipLevel])
 }
 
 // ─────────────────────────────────────────────
@@ -141,7 +150,7 @@ model Investment {
   id String @id @default(cuid())
 
   userId String
-  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   productId String
   product   InvestmentProduct @relation(fields: [productId], references: [id])
@@ -174,11 +183,11 @@ model Deposit {
   id String @id @default(cuid())
 
   userId String
-  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   amount Int
 
-  network String @default("tmoney")
+  network  String @default("tmoney")
   provider String @default("saspay")
 
   externalId String?
@@ -201,17 +210,17 @@ model Withdrawal {
   id String @id @default(cuid())
 
   userId String
-  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   firstName String
   lastName  String
 
-  amount Int
-  fee Int @default(500)
+  amount    Int
+  fee       Int @default(500)
   netAmount Int
 
   network String @default("moov")
-  phone String
+  phone   String
 
   status WithdrawalStatus @default(PENDING)
 
@@ -235,14 +244,14 @@ model Referral {
   id String @id @default(cuid())
 
   referrerId String
-  referrer   User @relation("Referrer", fields: [referrerId], references: [id], onDelete: Cascade)
+  referrer   User   @relation("Referrer", fields: [referrerId], references: [id], onDelete: Cascade)
 
   referredId String
-  referred   User @relation("Referred", fields: [referredId], references: [id], onDelete: Cascade)
+  referred   User   @relation("Referred", fields: [referredId], references: [id], onDelete: Cascade)
 
   firstInvestmentAt DateTime?
 
-  rewardAmount Int @default(500)
+  rewardAmount Int     @default(500)
   rewardGiven  Boolean @default(false)
 
   createdAt DateTime @default(now())
@@ -260,7 +269,7 @@ model Transaction {
   id String @id @default(cuid())
 
   userId String
-  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   type TransactionType
 
@@ -284,7 +293,7 @@ model Notification {
   id String @id @default(cuid())
 
   userId String
-  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   type NotificationType
 
@@ -299,21 +308,78 @@ model Notification {
   @@index([read])
   @@index([createdAt])
 }
+
 // ─────────────────────────────────────────────
-// RÉCOMPENSES QUOTIDIENNES
+// RÉCOMPENSES QUOTIDIENNES EXISTANTES
 // ─────────────────────────────────────────────
 
 model DailyReward {
-  id        String   @id @default(cuid())
+  id String @id @default(cuid())
 
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  amount    Int      @default(100)
+  amount     Int      @default(100)
   rewardDate String
 
   createdAt DateTime @default(now())
 
   @@unique([userId, rewardDate])
   @@index([userId])
+}
+
+// ─────────────────────────────────────────────
+// ACTIVATIONS VIP
+// ─────────────────────────────────────────────
+
+model VipActivation {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Niveau activé : 1, 2 ou 3
+  level Int
+
+  // Date et heure de l'activation
+  activatedAt DateTime @default(now())
+
+  // Durée pendant laquelle le salaire peut être réclamé
+  salaryDays Int
+
+  // Montant du salaire quotidien
+  salaryAmount Int @default(2000)
+
+  // Historique des salaires de cette activation
+  payments VipSalaryPayment[]
+
+  createdAt DateTime @default(now())
+
+  // Un utilisateur ne peut activer chaque niveau qu'une seule fois
+  @@unique([userId, level])
+  @@index([userId])
+  @@index([level])
+}
+
+// ─────────────────────────────────────────────
+// SALAIRES QUOTIDIENS VIP
+// ─────────────────────────────────────────────
+
+model VipSalaryPayment {
+  id String @id @default(cuid())
+
+  activationId String
+  activation   VipActivation @relation(fields: [activationId], references: [id], onDelete: Cascade)
+
+  // Numéro du jour de salaire : de 1 à 7, 15 ou 30
+  paymentDay Int
+
+  // Montant versé
+  amount Int @default(2000)
+
+  createdAt DateTime @default(now())
+
+  // Empêche le double versement d'un même jour pour une activation
+  @@unique([activationId, paymentDay])
+  @@index([activationId])
 }

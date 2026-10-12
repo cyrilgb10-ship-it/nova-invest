@@ -491,6 +491,32 @@ export default async function InvestmentsPage() {
             </span>
           </Link>
 
+          
+      {/* VIP */}
+          <Link
+            href="/vip"
+            className="flex min-w-[58px] flex-1 flex-col items-center gap-1 rounded-2xl py-2 text-amber-400 transition hover:text-amber-300"
+          >
+            <svg
+              width="21"
+              height="21"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="m2 8 5 4 5-8 5 8 5-4-2 12H4L2 8Z" />
+              <path d="M4 20h16" />
+            </svg>
+
+            <span className="text-[10px] font-bold">
+              VIP
+            </span>
+          </Link>
+
+
           {/* Investissements actif */}
           <Link
             href="/investments"
