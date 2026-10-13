@@ -197,7 +197,7 @@ export default function DepositPage() {
       }
 
       setMessage(
-        "Demande envoyée. Confirmez l'opération sur votre téléphone si SasPay vous le demande."
+        "Demande envoyée. Confirmez l'opération sur votre téléphone."
       );
     } catch {
       setError(
@@ -440,7 +440,7 @@ export default function DepositPage() {
 
               <p className="text-center text-xs leading-5 text-zinc-500">
                 Votre solde ne sera crédité qu'après confirmation du
-                paiement par SasPay. Ne partagez jamais votre code secret
+                paiement. Ne partagez jamais votre code secret
                 Mobile Money.
               </p>
             </form>
@@ -448,7 +448,7 @@ export default function DepositPage() {
         </div>
 
         <p className="mt-6 text-center text-xs text-zinc-600">
-          Paiements sécurisés via SasPay · Nova Invest
+          Paiements sécurisés · Nova Invest
         </p>
       </div>
     </main>
