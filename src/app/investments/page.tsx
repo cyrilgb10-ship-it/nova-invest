@@ -806,7 +806,7 @@ export default async function InvestmentsPage() {
           </Link>
 
           <Link
-            href="/account"
+            href="/profile"
             className="flex min-w-[58px] flex-1 flex-col items-center gap-1 rounded-2xl py-2 text-slate-500 transition hover:text-white"
           >
             <svg
