@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { connection, NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentAdmin } from "@/lib/auth";
@@ -16,6 +16,8 @@ type HistoryType = (typeof allowedTypes)[number];
 
 export async function GET(request: NextRequest) {
   try {
+    await connection();
+
     const admin = await getCurrentAdmin();
 
     if (!admin) {

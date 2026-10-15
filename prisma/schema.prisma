@@ -42,6 +42,8 @@ enum TransactionType {
   INVESTMENT_RETURN
   DAILY_REWARD
   VIP_SALARY
+  PREMIUM_PURCHASE
+  PREMIUM_REWARD
 }
 
 enum NotificationType {
@@ -56,11 +58,11 @@ enum NotificationType {
 // ─────────────────────────────────────────────
 
 model User {
-  id           String @id @default(cuid())
-  username     String @unique
+  id           String  @id @default(cuid())
+  username     String  @unique
   firstName    String
   lastName     String
-  phone        String @unique
+  phone        String  @unique
   email        String? @unique
   passwordHash String
 
@@ -76,19 +78,20 @@ model User {
 
   referralCode String @unique
 
-  referredById String?
-  referredBy   User?  @relation("UserSponsor", fields: [referredById], references: [id])
+  referredById  String?
+  referredBy    User?  @relation("UserSponsor", fields: [referredById], references: [id])
   referredUsers User[] @relation("UserSponsor")
 
   referralsGiven    Referral[] @relation("Referrer")
   referralsReceived Referral[] @relation("Referred")
 
-  investments   Investment[]
-  deposits      Deposit[]
-  withdrawals   Withdrawal[]
-  transactions  Transaction[]
-  notifications Notification[]
-  dailyRewards  DailyReward[]
+  investments      Investment[]
+  deposits         Deposit[]
+  withdrawals      Withdrawal[]
+  transactions     Transaction[]
+  notifications    Notification[]
+  dailyRewards     DailyReward[]
+  premiumPurchases PremiumPurchase[]
 
   // Activations VIP de l'utilisateur
   vipActivations VipActivation[]
@@ -106,8 +109,8 @@ model User {
 // ─────────────────────────────────────────────
 
 model Admin {
-  id           String @id @default(cuid())
-  username     String @unique
+  id           String   @id @default(cuid())
+  username     String   @unique
   passwordHash String
 
   createdAt DateTime @default(now())
@@ -134,7 +137,8 @@ model InvestmentProduct {
 
   active Boolean @default(true)
 
-  investments Investment[]
+  investments     Investment[]
+  premiumPurchases PremiumPurchase[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -143,7 +147,7 @@ model InvestmentProduct {
 }
 
 // ─────────────────────────────────────────────
-// INVESTISSEMENTS
+// INVESTISSEMENTS NORMAUX
 // ─────────────────────────────────────────────
 
 model Investment {
@@ -154,6 +158,12 @@ model Investment {
 
   productId String
   product   InvestmentProduct @relation(fields: [productId], references: [id])
+
+  // Achat Premium utilisé pour débloquer cet investissement.
+  // UNIQUE garantit qu'un achat Premium ne peut débloquer
+  // qu'un seul investissement normal.
+  premiumPurchaseId String?          @unique
+  premiumPurchase   PremiumPurchase? @relation(fields: [premiumPurchaseId], references: [id])
 
   amountInvested Int
   profitAmount   Int
@@ -310,7 +320,7 @@ model Notification {
 }
 
 // ─────────────────────────────────────────────
-// RÉCOMPENSES QUOTIDIENNES EXISTANTES
+// RÉCOMPENSES QUOTIDIENNES
 // ─────────────────────────────────────────────
 
 model DailyReward {
@@ -382,4 +392,48 @@ model VipSalaryPayment {
   // Empêche le double versement d'un même jour pour une activation
   @@unique([activationId, paymentDay])
   @@index([activationId])
+}
+
+// ─────────────────────────────────────────────
+// ACHATS PREMIUM ET RÉCOMPENSES À 95 JOURS
+// ─────────────────────────────────────────────
+
+model PremiumPurchase {
+  id String @id @default(cuid())
+
+  userId String
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Produit normal correspondant au Premium acheté
+  productId String
+  product   InvestmentProduct @relation(fields: [productId], references: [id])
+
+  // Copie des montants au moment de l'achat
+  productName    String
+  amountInvested Int
+  rewardAmount   Int
+  returnAmount   Int
+
+  // Cycle de 95 jours
+  purchasedAt  DateTime @default(now())
+  maturityDate DateTime
+
+  // Déblocage d'un seul achat normal
+  unlockedAt DateTime?
+  consumedAt DateTime?
+
+  // Investissement normal débloqué par cet achat Premium
+  unlockedInvestment Investment?
+
+  // Récompense réclamée après l'échéance
+  rewardClaimedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([productId])
+  @@index([maturityDate])
+  @@index([rewardClaimedAt])
+  @@index([userId, productId, consumedAt])
 }

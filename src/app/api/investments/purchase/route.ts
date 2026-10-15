@@ -38,9 +38,7 @@ export async function POST(request: NextRequest) {
     }
 
     const productId =
-      typeof body.productId === "string"
-        ? body.productId.trim()
-        : "";
+      typeof body.productId === "string" ? body.productId.trim() : "";
 
     if (!productId) {
       return NextResponse.json(
@@ -50,7 +48,7 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await prisma.$transaction(async (tx) => {
-      // Vérifier que le produit est toujours disponible.
+      // 1. Vérifier que le produit est disponible.
       const product = await tx.investmentProduct.findFirst({
         where: {
           id: productId,
@@ -62,11 +60,9 @@ export async function POST(request: NextRequest) {
         throw new Error("PRODUCT_UNAVAILABLE");
       }
 
-      // Récupérer les données les plus récentes de l'utilisateur.
+      // 2. Récupérer les données actuelles de l'utilisateur.
       const currentUser = await tx.user.findUnique({
-        where: {
-          id: user.id,
-        },
+        where: { id: user.id },
         select: {
           id: true,
           investBalance: true,
@@ -78,7 +74,7 @@ export async function POST(request: NextRequest) {
         throw new Error("USER_NOT_FOUND");
       }
 
-      // Vérifier les paramètres financiers du produit.
+      // 3. Vérifier la configuration financière du produit.
       if (
         !Number.isSafeInteger(product.investmentAmount) ||
         product.investmentAmount <= 0 ||
@@ -87,19 +83,14 @@ export async function POST(request: NextRequest) {
         !Number.isSafeInteger(product.profitAmount) ||
         product.profitAmount < 0 ||
         !Number.isSafeInteger(product.durationDays) ||
-        product.durationDays <= 0
-      ) {
-        throw new Error("INVALID_PRODUCT_CONFIGURATION");
-      }
-
-      if (
+        product.durationDays <= 0 ||
         product.returnAmount !==
-        product.investmentAmount + product.profitAmount
+          product.investmentAmount + product.profitAmount
       ) {
         throw new Error("INVALID_PRODUCT_CONFIGURATION");
       }
 
-      // Vérifier la limite d'achat.
+      // 4. Vérifier la limite d'achat du produit normal.
       if (product.purchaseLimit !== null) {
         const purchaseCount = await tx.investment.count({
           where: {
@@ -114,10 +105,51 @@ export async function POST(request: NextRequest) {
       }
 
       /*
-       * Débiter le solde de façon conditionnelle.
-       * Si plusieurs demandes arrivent simultanément, seule une
-       * demande disposant encore du solde nécessaire peut réussir.
+       * 5. Trouver un achat Premium disponible pour ce produit.
+       *
+       * Chaque achat Premium débloque un seul achat normal.
+       * Le déblocage doit appartenir à l'utilisateur, concerner
+       * exactement le même produit et ne pas avoir été consommé.
        */
+      const premiumPurchase = await tx.premiumPurchase.findFirst({
+        where: {
+          userId: currentUser.id,
+          productId: product.id,
+          unlockedAt: {
+            not: null,
+          },
+          consumedAt: null,
+        },
+        orderBy: {
+          purchasedAt: "asc",
+        },
+      });
+
+      if (!premiumPurchase) {
+        throw new Error("PREMIUM_UNLOCK_REQUIRED");
+      }
+
+      // 6. Réserver ce déblocage pour empêcher sa réutilisation.
+      const consumed = await tx.premiumPurchase.updateMany({
+        where: {
+          id: premiumPurchase.id,
+          userId: currentUser.id,
+          productId: product.id,
+          unlockedAt: {
+            not: null,
+          },
+          consumedAt: null,
+        },
+        data: {
+          consumedAt: new Date(),
+        },
+      });
+
+      if (consumed.count !== 1) {
+        throw new Error("PREMIUM_UNLOCK_REQUIRED");
+      }
+
+      // 7. Débiter le solde à investir de manière conditionnelle.
       const balanceUpdate = await tx.user.updateMany({
         where: {
           id: currentUser.id,
@@ -136,6 +168,7 @@ export async function POST(request: NextRequest) {
         throw new Error("INSUFFICIENT_BALANCE");
       }
 
+      // 8. Calculer les dates de l'investissement normal.
       const startDate = new Date();
       const maturityDate = new Date(startDate);
 
@@ -143,11 +176,12 @@ export async function POST(request: NextRequest) {
         maturityDate.getDate() + product.durationDays
       );
 
-      // Créer l'investissement.
+      // 9. Créer l'investissement et le relier au déblocage consommé.
       const investment = await tx.investment.create({
         data: {
           userId: currentUser.id,
           productId: product.id,
+          premiumPurchaseId: premiumPurchase.id,
           amountInvested: product.investmentAmount,
           profitAmount: product.profitAmount,
           returnAmount: product.returnAmount,
@@ -160,7 +194,7 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      // Enregistrer la sortie du solde à investir.
+      // 10. Enregistrer la transaction financière.
       await tx.transaction.create({
         data: {
           userId: currentUser.id,
@@ -171,7 +205,7 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      // Notification détaillée de création.
+      // 11. Envoyer une notification à l'utilisateur.
       await tx.notification.create({
         data: {
           userId: currentUser.id,
@@ -188,8 +222,8 @@ export async function POST(request: NextRequest) {
       });
 
       /*
-       * Bonus de parrainage :
-       * attribution lors du premier investissement uniquement.
+       * 12. Bonus de parrainage :
+       * uniquement lors du premier investissement du filleul.
        */
       let referralRewardGiven = false;
 
@@ -205,7 +239,6 @@ export async function POST(request: NextRequest) {
           !referral.rewardGiven &&
           referral.firstInvestmentAt === null
         ) {
-          // Vérifier également que le parrain existe.
           const referrer = await tx.user.findUnique({
             where: {
               id: referral.referrerId,
@@ -216,10 +249,6 @@ export async function POST(request: NextRequest) {
           });
 
           if (referrer) {
-            /*
-             * La mise à jour conditionnelle évite de réclamer
-             * une seconde fois le même bonus.
-             */
             const referralClaim = await tx.referral.updateMany({
               where: {
                 id: referral.id,
@@ -243,7 +272,6 @@ export async function POST(request: NextRequest) {
               }
 
               if (rewardAmount > 0) {
-                // Créditer le solde à retirer du parrain.
                 await tx.user.update({
                   where: {
                     id: referrer.id,
@@ -255,7 +283,6 @@ export async function POST(request: NextRequest) {
                   },
                 });
 
-                // Enregistrer le bonus.
                 await tx.transaction.create({
                   data: {
                     userId: referrer.id,
@@ -266,7 +293,6 @@ export async function POST(request: NextRequest) {
                   },
                 });
 
-                // Notifier le parrain.
                 await tx.notification.create({
                   data: {
                     userId: referrer.id,
@@ -326,6 +352,17 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      if (error.message === "PREMIUM_UNLOCK_REQUIRED") {
+        return NextResponse.json(
+          {
+            error:
+              "Vous devez acheter le Premium correspondant à ce produit avant de pouvoir l'acheter normalement.",
+            code: "PREMIUM_UNLOCK_REQUIRED",
+          },
+          { status: 400 }
+        );
+      }
+
       if (error.message === "INSUFFICIENT_BALANCE") {
         return NextResponse.json(
           {
@@ -347,10 +384,7 @@ export async function POST(request: NextRequest) {
       }
 
       if (error.message === "INVALID_PRODUCT_CONFIGURATION") {
-        console.error(
-          "INVALID_PRODUCT_CONFIGURATION:",
-          error.message
-        );
+        console.error("INVALID_PRODUCT_CONFIGURATION");
 
         return NextResponse.json(
           {
